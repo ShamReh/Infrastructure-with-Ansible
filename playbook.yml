@@ -1,0 +1,105 @@
+---
+
+
+- name: AWS EC2 Automation Playbook
+  hosts: localhost
+  gather_facts: false
+
+
+  vars_files:
+  - vars/info.yml
+
+  tasks:
+  - name: create a default tenancy VPC
+    ec2_vpc_net:
+      name: Sham's VPC
+      aws_access_key: "{{ aws_id }}"
+      aws_secret_key: "{{ aws_key }}"
+      region: "{{ aws_region }}"
+      state: present
+      cidr_block: 172.22.0.0/16
+      tags:
+        module: ec2_vpc_net
+        Name: AnsibleVPC
+      tenancy: default
+    register: ansibleVPC
+    
+  - name: vpc output
+    debug:
+      var: ansibleVPC
+
+  - name: create internet gateway
+    ec2_vpc_igw:
+      aws_access_key: "{{ aws_id }}"
+      aws_secret_key: "{{ aws_key }}"
+      region: "{{ aws_region }}"
+      state: present
+      vpc_id: "{{ ansibleVPC.vpc.id }}"
+      tags:
+        Name: ansibleVPC_IGW
+    register: ansibleVPC_igw
+
+
+  - name: display IGW details
+    debug:
+      var: ansibleVPC_igw
+
+  - name: create public subnet in eu-west-1
+    ec2_vpc_subnet:
+      aws_access_key: "{{ aws_id }}"
+      aws_secret_key: "{{ aws_key }}"
+      region: "{{ aws_region }}"
+      state: present
+      cidr: 172.22.1.0/24
+      vpc_id: "{{ ansibleVPC.vpc.id}}"
+      map_public: yes
+      tags:
+        Name: Public subnet
+    register: public_subnet
+
+
+  - name: details of public subnet
+    debug:
+      var: public_subnet
+
+  - name: public subnet route table
+    ec2_vpc_route_table:
+      aws_access_key: "{{ aws_id }}"
+      aws_secret_key: "{{ aws_key }}"
+      region: "{{ aws_region }}"
+      state: present
+      vpc_id: "{{ ansibleVPC.vpc.id }}"
+      tags:
+        Name: PubSub_RT
+      subnets:
+        - "{{ public_subnet.subnet.id }}"
+      routes:
+        - dest: 0.0.0.0/0
+          gateway_id: "{{ ansibleVPC_igw.gateway_id }}"
+    register: rt_ansibleVPC_PublicSubnet
+
+
+  - name: Public Subnet details
+    debug:
+      var: rt_ansibleVPC_PublicSubnet
+
+  - name: Create security group
+    ec2_group:
+      aws_access_key: "{{ aws_id }}"
+      aws_secret_key: "{{ aws_key }}"
+      region: "{{ aws_region }}"
+      name: "AnsibleSG"
+      description: Security group for ssh access to Ansible VMs
+      vpc_id: "{{ ansibleVPC.vpc.id }}"
+      tags:
+        Name: Ansible Security group
+      rules:
+        - proto: "tcp"
+          ports: "22"
+          cidr_ip: 0.0.0.0/0
+    register: my_vpc_sg
+
+
+  - name: Make SG ID available in variable
+    set_fact:
+      sg_id: "{{ my_vpc_sg.group_id }}"
