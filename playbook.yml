@@ -103,3 +103,26 @@
   - name: Make SG ID available in variable
     set_fact:
       sg_id: "{{ my_vpc_sg.group_id }}"
+
+  - name: Provisioning EC2 instance
+    ec2:
+      aws_access_key: "{{ aws_id }}"
+      aws_secret_key: "{{ aws_key }}"
+      region: "{{ aws_region }}"
+      image: ami-04dd4500af104442f
+      instance_type: t2.micro
+      key_name: "{{ssh_keyname}}"
+      count: 2
+      state: present
+      group_id: "{{my_vpc_sg.group_id}}"
+      wait: yes
+      vpc_subnet_id: "{{public_subnet.subnet.id}}"
+      assign_public_ip: yes
+      instance_tags:
+        Name: Ansible Worker
+    register: ec2info
+
+
+  - name: Print EC2 Info Results
+    debug:
+      var: ec2info 
